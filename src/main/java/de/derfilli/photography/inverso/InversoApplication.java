@@ -11,18 +11,18 @@ import javafx.scene.Scene;
 import javafx.stage.Screen;
 import javafx.stage.Stage;
 
-public class InversioApplication extends Application {
+public class InversoApplication extends Application {
 
   @Override
   public void start(Stage stage) throws IOException {
     FXMLLoader fxmlLoader = new FXMLLoader(
-        InversioApplication.class.getResource("hello-view.fxml"));
+        InversoApplication.class.getResource("inverso-startup.fxml"));
     Scene scene = new Scene(fxmlLoader.load(), 640, 480);
 
-    InversioController inversioController = fxmlLoader.getController();
-    inversioController.setStage(stage);
+    InversoController inversoController = fxmlLoader.getController();
+    inversoController.setStage(stage);
 
-    stage.setTitle("Hello!");
+    stage.setTitle("Inversio - Raw Image Inversion");
     stage.setScene(scene);
     stage.show();
 
@@ -35,7 +35,7 @@ public class InversioApplication extends Application {
     var posX = location.getX();
     var posY = location.getY();
 
-    var target = Screen.getScreensForRectangle(posX, posY, 1, 100)
+    var target = Screen.getScreensForRectangle(posX, posY, 1, 1)
         .stream().findAny()
         .orElse(Screen.getPrimary());
 

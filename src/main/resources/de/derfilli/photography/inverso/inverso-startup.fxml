@@ -8,7 +8,7 @@
 <?import javafx.scene.text.Font?>
 <VBox alignment="CENTER" maxHeight="-Infinity" maxWidth="-Infinity" minHeight="-Infinity"
   minWidth="-Infinity" prefHeight="400.0" prefWidth="600.0" xmlns="http://javafx.com/javafx/25"
-  fx:controller="de.derfilli.photography.inverso.InversioController"
+  fx:controller="de.derfilli.photography.inverso.InversoController"
   xmlns:fx="http://javafx.com/fxml/1">
   <children>
     <Label text="Welcome to"/>
