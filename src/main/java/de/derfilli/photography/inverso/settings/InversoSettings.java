@@ -29,11 +29,17 @@ public final class InversoSettings {
    * @since 1.0.0
    */
   public void add(String key, String value) throws SettingsException {
+    if (key.length() > MAX_KEY_LENGTH) {
+      throw new SettingsException("key length exceeded");
+    }
+    if (value.length() > MAX_VALUE_LENGTH) {
+      throw new SettingsException("value length exceeded");
+    }
     Platform.runLater(() -> {
       try {
         preferences.put(key, value);
       } catch (IllegalArgumentException | NullPointerException | IllegalStateException e) {
-        throw new SettingsException("Addition of settings failed.", e);
+        throw new SettingsException("addition of settings failed.", e);
       }
     });
   }

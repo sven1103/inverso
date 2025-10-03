@@ -12,7 +12,7 @@
   xmlns:fx="http://javafx.com/fxml/1">
   <children>
     <Label text="Welcome to"/>
-    <Label text="Inversio">
+    <Label text="Inverso">
       <font>
         <Font size="39.0"/>
       </font>
