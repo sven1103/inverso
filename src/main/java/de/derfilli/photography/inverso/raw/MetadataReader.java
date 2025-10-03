@@ -14,7 +14,8 @@ import org.jetbrains.annotations.NotNull;
  */
 public interface MetadataReader {
 
-  Optional<Image> thumbnailFromRawFile(@NotNull File file) throws MetadataReaderException;
+  Optional<Image> thumbnailFromRawFile(@NotNull File file)
+      throws MetadataReaderException;
 
   class MetadataReaderFactory {
 
@@ -27,6 +28,7 @@ public interface MetadataReader {
   }
 
   class MetadataReaderException extends RuntimeException {
+
     MetadataReaderException(String message) {
       super(message);
     }

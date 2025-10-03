@@ -22,7 +22,7 @@ public class EditorController {
   private ImageView imageView;
 
   @FXML
-  private VBox vBox;
+  private VBox imageWrapper;
 
   private File file;
 
@@ -35,7 +35,12 @@ public class EditorController {
 
   @FXML
   private void initialize() {
-    System.out.println("Initializing EditorController");
+    metadataReader.thumbnailFromRawFile(file).ifPresent(imageView::setImage);
+    imageView.setPreserveRatio(true);
+    imageView.setSmooth(true);
+    imageView.setCache(true);
+    imageView.fitHeightProperty().bind(imageWrapper.heightProperty());
+    imageView.fitWidthProperty().bind(imageWrapper.widthProperty());
   }
 
 
