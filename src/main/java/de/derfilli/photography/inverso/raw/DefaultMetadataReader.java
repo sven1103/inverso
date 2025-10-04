@@ -1,6 +1,7 @@
 package de.derfilli.photography.inverso.raw;
 
 import java.io.ByteArrayInputStream;
+import java.io.ByteArrayOutputStream;
 import java.io.File;
 import java.util.Optional;
 import javafx.scene.image.Image;
@@ -19,7 +20,7 @@ import org.jetbrains.annotations.NotNull;
 class DefaultMetadataReader implements MetadataReader {
 
   @Override
-  public Optional<Image> thumbnailFromRawFile(@NotNull File file) throws MetadataReaderException {
+  public Optional<ByteArrayInputStream> thumbnailFromRawFile(@NotNull File file) throws MetadataReaderException {
     try (libraw_data_t libRawData = LibRaw.libraw_init(0)) {
       int returnCode = LibRaw.libraw_open_file(libRawData, file.getAbsolutePath());
       if (returnCode != 0) {
@@ -35,7 +36,7 @@ class DefaultMetadataReader implements MetadataReader {
       byte[] bytes = new byte[(int) len];
       buf.get(bytes);
 
-      return Optional.of(new Image(new ByteArrayInputStream(bytes)));
+      return Optional.of(new ByteArrayInputStream(bytes));
     }
   }
 }

@@ -78,7 +78,7 @@ public class InversoController {
 
   private void loadEditorStage(File image) throws IOException {
     var reader = MetadataReader.MetadataReaderFactory.getDefaultReader();
-    FXMLLoader loader = new FXMLLoader(EditorController.class.getResource("editor.fxml"));
+    FXMLLoader loader = new FXMLLoader(EditorController.class.getResource("inverso-editor.fxml"));
     loader.setControllerFactory(type -> {
       if (type == EditorController.class) {
         return new EditorController(image, reader);

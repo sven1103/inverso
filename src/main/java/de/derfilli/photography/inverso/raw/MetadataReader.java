@@ -1,8 +1,8 @@
 package de.derfilli.photography.inverso.raw;
 
+import java.io.ByteArrayInputStream;
 import java.io.File;
 import java.util.Optional;
-import javafx.scene.image.Image;
 import org.jetbrains.annotations.NotNull;
 
 /**
@@ -14,7 +14,7 @@ import org.jetbrains.annotations.NotNull;
  */
 public interface MetadataReader {
 
-  Optional<Image> thumbnailFromRawFile(@NotNull File file)
+  Optional<ByteArrayInputStream> thumbnailFromRawFile(@NotNull File file)
       throws MetadataReaderException;
 
   class MetadataReaderFactory {
