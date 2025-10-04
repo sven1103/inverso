@@ -7,6 +7,7 @@ import java.io.File;
 import java.util.Objects;
 import javafx.application.Platform;
 import javafx.fxml.FXML;
+import javafx.scene.control.ScrollPane;
 import javafx.scene.control.SplitPane;
 import javafx.scene.image.Image;
 import javafx.scene.image.ImageView;
@@ -36,15 +37,26 @@ public class EditorController {
   private StackPane thumbnailPane;
 
   @FXML
-  private AnchorPane viewer;
+  private ImageView thumbnailView;
+
+  private byte[] thumbnailImage = new byte[0];
 
   @FXML
-  private ImageView thumbnailView;
+  private StackPane viewer;
+
+  @FXML
+  private ScrollPane viewerScroll;
+
+  @FXML
+  private StackPane viewerContent;
+
+  @FXML
+  private ImageView imageView;
+
+  private byte[] mainImage = new byte[0];
 
   @FXML
   private AnchorPane controls;
-
-  private byte[] thumbnailImage = new byte[0];
 
   private File file;
 
@@ -57,6 +69,10 @@ public class EditorController {
 
   @FXML
   private void initialize() {
+    viewerScroll.getStylesheets().add(
+        Objects.requireNonNull(getClass().getResource("editor.css")).toExternalForm());
+
+    // 1. load and set-up thumbnail
     metadataReader.thumbnailFromRawFile(file).ifPresent(this::setThumbnail);
 
     thumbnailView.setPreserveRatio(true);
@@ -69,6 +85,48 @@ public class EditorController {
 
     SplitPane.setResizableWithParent(thumbnailPane, false); // user dragging won't expand it
 
+    // 2. load and set-up main image
+    imageView.setPreserveRatio(true);
+    imageView.setSmooth(true);
+    imageView.setCache(true);
+    viewerScroll.setFitToHeight(false);
+    viewerScroll.setFitToWidth(false);
+    metadataReader.thumbnailFromRawFile(file).ifPresent(this::setImage);
+
+    // center content
+    viewerScroll.viewportBoundsProperty().addListener((obs, ov, vb) ->
+        viewerContent.setMinSize(vb.getWidth(), vb.getHeight()));
+
+    // recalc when viewport or image changes
+    viewerScroll.viewportBoundsProperty().addListener((obs, ov, nv) -> applyFit());
+    imageView.imageProperty().addListener((obs, ov, nv) -> applyFit());
+
+    imageView.setImage(new Image(new ByteArrayInputStream(mainImage)));
+
+  }
+
+  private void applyFit() {
+    var image = imageView.getImage();
+    if (image == null) return;
+
+    double imageWidth = image.getWidth();
+    double imageHeight = image.getHeight();
+
+    if (imageWidth <= 0 || imageHeight <= 0) return;
+
+    double viewportWidth = viewerScroll.getViewportBounds().getWidth();
+    double viewportHeight = viewerScroll.getViewportBounds().getHeight();
+    if (viewportWidth <= 0 || viewportHeight <= 0) return;
+
+    double scale = Math.min(viewportWidth / imageWidth, viewportHeight / imageHeight);
+    scale = Math.min(scale, 1.0);
+
+    imageView.setFitWidth(imageWidth * scale);
+    imageView.setFitHeight(imageHeight * scale);
+  }
+
+  private void setImage(@NotNull ByteArrayInputStream inputStream) {
+    mainImage = inputStream.readAllBytes();
   }
 
   private void setThumbnail(@NotNull ByteArrayInputStream stream) {
