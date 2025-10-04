@@ -8,6 +8,7 @@ import java.nio.file.FileSystems;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
+import java.util.List;
 import java.util.Objects;
 import javafx.fxml.FXML;
 import javafx.fxml.FXMLLoader;
@@ -39,7 +40,7 @@ public class InversoController {
   }
 
   @FXML
-  protected void openImage() {
+  protected void openFiles() {
     if (stage == null) {
       throw new IllegalArgumentException("stage must not be null.");
     }
@@ -55,11 +56,11 @@ public class InversoController {
         lastDirectoryPath -> setInitialDirectory(fileChooser, Paths.get(lastDirectoryPath)));
 
     // 3. wait for the user selection
-    var selectedFile = fileChooser.showOpenDialog(stage);
+    var selectedFile = fileChooser.showOpenMultipleDialog(stage);
 
     // 4. continue to load the editor
-    if (selectedFile != null) {
-      var parentDirectory = selectedFile.getParent();
+    if (selectedFile != null && !selectedFile.isEmpty()) {
+      var parentDirectory = selectedFile.getFirst().getParent();
       // we store the selected file directory for the next file search (persistent)
       settings.add(LAST_DIRECTORY,
           parentDirectory == null ? FileSystems.getDefault().getSeparator() : parentDirectory);
@@ -76,12 +77,12 @@ public class InversoController {
     this.stage = Objects.requireNonNull(stage);
   }
 
-  private void loadEditorStage(File image) throws IOException {
+  private void loadEditorStage(List<File> images) throws IOException {
     var reader = MetadataReader.MetadataReaderFactory.getDefaultReader();
     FXMLLoader loader = new FXMLLoader(EditorController.class.getResource("inverso-editor.fxml"));
     loader.setControllerFactory(type -> {
       if (type == EditorController.class) {
-        return new EditorController(image, reader);
+        return new EditorController(images, reader);
       }
       try {
         return type.getDeclaredConstructor().newInstance();
@@ -94,7 +95,7 @@ public class InversoController {
 
     var editorStage = new Stage();
     editorStage.initOwner(stage);
-    editorStage.setTitle("Inverso — " + image.getName());
+    editorStage.setTitle("Inverso — Editor");
     editorStage.setScene(new Scene(root, 1200, 800));
     editorStage.show();
 

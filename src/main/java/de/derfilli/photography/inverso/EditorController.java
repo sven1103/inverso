@@ -2,19 +2,32 @@ package de.derfilli.photography.inverso;
 
 
 import de.derfilli.photography.inverso.raw.MetadataReader;
+import de.derfilli.photography.inverso.settings.Thumbnail;
 import java.io.ByteArrayInputStream;
 import java.io.File;
+import java.util.ArrayList;
+import java.util.Comparator;
+import java.util.List;
 import java.util.Objects;
 import javafx.application.Platform;
+import javafx.collections.FXCollections;
+import javafx.collections.ObservableList;
 import javafx.fxml.FXML;
+import javafx.geometry.Orientation;
 import javafx.scene.control.ScrollPane;
 import javafx.scene.control.SplitPane;
 import javafx.scene.image.Image;
 import javafx.scene.image.ImageView;
 import javafx.scene.layout.AnchorPane;
+import javafx.scene.layout.Region;
 import javafx.scene.layout.StackPane;
+import javafx.scene.layout.TilePane;
 import javafx.scene.layout.VBox;
 import org.jetbrains.annotations.NotNull;
+import reactor.core.publisher.Flux;
+import reactor.core.publisher.Mono;
+import reactor.core.scheduler.Scheduler;
+import reactor.core.scheduler.Schedulers;
 
 /**
  * <b><class short description - 1 Line!></b>
@@ -25,7 +38,11 @@ import org.jetbrains.annotations.NotNull;
  */
 public class EditorController {
 
-  private static final Double THUMBNAIL_MAX_WIDTH = 220.0;
+  private final Scheduler fxScheduler = Schedulers.fromExecutor(Platform::runLater);
+  @FXML
+
+  private static final double CELL_MIN = 120;
+  private static final double CELL_MAX = 330;
 
   @FXML
   private VBox editorWrapper;
@@ -34,10 +51,7 @@ public class EditorController {
   private SplitPane editorView;
 
   @FXML
-  private StackPane thumbnailPane;
-
-  @FXML
-  private ImageView thumbnailView;
+  private TilePane thumbnailPane;
 
   private byte[] thumbnailImage = new byte[0];
 
@@ -58,12 +72,14 @@ public class EditorController {
   @FXML
   private AnchorPane controls;
 
-  private File file;
+  private ObservableList<File> files = FXCollections.observableList(new ArrayList<>());
 
   private MetadataReader metadataReader;
 
-  public EditorController(@NotNull File imageFile, @NotNull MetadataReader metadataReader) {
-    this.file = Objects.requireNonNull(imageFile);
+  private Comparator<File> comparator = Comparator.comparing(File::getName);
+
+  public EditorController(@NotNull List<File> imageFiles, @NotNull MetadataReader metadataReader) {
+    this.files.addAll(Objects.requireNonNull(imageFiles.stream().sorted(comparator).toList()));
     this.metadataReader = Objects.requireNonNull(metadataReader);
   }
 
@@ -73,17 +89,29 @@ public class EditorController {
         Objects.requireNonNull(getClass().getResource("editor.css")).toExternalForm());
 
     // 1. load and set-up thumbnail
-    metadataReader.thumbnailFromRawFile(file).ifPresent(this::setThumbnail);
+    metadataReader.thumbnailFromRawFile(files.getFirst()).ifPresent(this::setThumbnail);
+    Flux.fromIterable(files)
+        .distinct()
+        .flatMapSequential(file ->
+            Mono.just(metadataReader.thumbnailFromRawFile(file)
+                .map(inputStream -> new Thumbnail(new Image(inputStream, 460, 0, true, true), 200,
+                    0))
+                .orElse(new Thumbnail(new Image(new ByteArrayInputStream(new byte[0])), 0, 0))))
+        .publishOn(fxScheduler)
+        .doOnNext(thumbnail -> {
+          thumbnailPane.getChildren().add(thumbnail);
+        })
+        .doAfterTerminate(() -> Platform.runLater(() -> fitThumbnails(thumbnailPane.getWidth())))
+        .subscribeOn(Schedulers.boundedElastic())
+        .subscribe();
 
-    thumbnailView.setPreserveRatio(true);
-    thumbnailView.setSmooth(true);
-    thumbnailView.setCache(true);
-    thumbnailView.fitWidthProperty().bind(thumbnailPane.widthProperty());
+    thumbnailPane.widthProperty().addListener((observable, oldValue, newValue) ->
+             fitThumbnails(newValue.doubleValue()));
+    thumbnailPane.setMinWidth(0);
+    thumbnailPane.setPrefWidth(Region.USE_COMPUTED_SIZE);
+    thumbnailPane.setMaxWidth(Double.MAX_VALUE);
 
-    thumbnailPane.widthProperty().addListener(
-        (observable, oldValue, newValue) -> Platform.runLater(this::maybeApplyThumbnail));
-
-    SplitPane.setResizableWithParent(thumbnailPane, false); // user dragging won't expand it
+    SplitPane.setResizableWithParent(thumbnailPane, true); // user dragging won't expand it
 
     // 2. load and set-up main image
     imageView.setPreserveRatio(true);
@@ -91,7 +119,7 @@ public class EditorController {
     imageView.setCache(true);
     viewerScroll.setFitToHeight(false);
     viewerScroll.setFitToWidth(false);
-    metadataReader.thumbnailFromRawFile(file).ifPresent(this::setImage);
+    metadataReader.thumbnailFromRawFile(files.getFirst()).ifPresent(this::setImage);
 
     // center content
     viewerScroll.viewportBoundsProperty().addListener((obs, ov, vb) ->
@@ -107,16 +135,22 @@ public class EditorController {
 
   private void applyFit() {
     var image = imageView.getImage();
-    if (image == null) return;
+    if (image == null) {
+      return;
+    }
 
     double imageWidth = image.getWidth();
     double imageHeight = image.getHeight();
 
-    if (imageWidth <= 0 || imageHeight <= 0) return;
+    if (imageWidth <= 0 || imageHeight <= 0) {
+      return;
+    }
 
     double viewportWidth = viewerScroll.getViewportBounds().getWidth();
     double viewportHeight = viewerScroll.getViewportBounds().getHeight();
-    if (viewportWidth <= 0 || viewportHeight <= 0) return;
+    if (viewportWidth <= 0 || viewportHeight <= 0) {
+      return;
+    }
 
     double scale = Math.min(viewportWidth / imageWidth, viewportHeight / imageHeight);
     scale = Math.min(scale, 1.0);
@@ -133,27 +167,17 @@ public class EditorController {
     thumbnailImage = stream.readAllBytes();
   }
 
-  private void maybeApplyThumbnail() {
-    if (thumbnailImage == null || thumbnailImage.length == 0) {
-      return;
-    }
-    var paneWidth = thumbnailPane.getWidth();
-    if (paneWidth <= 0) {
-      return;
-    }
-    var paneHeight = thumbnailPane.getHeight();
-    if (paneHeight <= 0) {
-      return;
-    }
+  private void fitThumbnails(double paneWidth) {
+    if (paneWidth <= 0) return;
 
-    thumbnailView.setImage(
-        new Image(
-            new ByteArrayInputStream(thumbnailImage),
-            Math.min(THUMBNAIL_MAX_WIDTH, paneWidth),
-            Math.min(THUMBNAIL_MAX_WIDTH, paneHeight),
-            true,
-            true));
+    var padding = thumbnailPane.getPadding();
+    double contentWidth = paneWidth - padding.getLeft() - padding.getRight();
+
+    double cellW = Math.clamp(contentWidth, CELL_MIN, CELL_MAX);
+
+    thumbnailPane.setVgap(10);
+    thumbnailPane.setPrefColumns(1);
+    thumbnailPane.setPrefTileWidth(cellW);
+    thumbnailPane.setOrientation(Orientation.VERTICAL);
   }
-
-
 }
