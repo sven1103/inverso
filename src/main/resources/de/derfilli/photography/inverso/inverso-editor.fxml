@@ -1,9 +1,9 @@
 <?xml version="1.0" encoding="UTF-8"?>
 
+<?import javafx.scene.control.Button?>
 <?import javafx.scene.control.ScrollPane?>
 <?import javafx.scene.control.SplitPane?>
 <?import javafx.scene.image.ImageView?>
-<?import javafx.scene.layout.AnchorPane?>
 <?import javafx.scene.layout.StackPane?>
 <?import javafx.scene.layout.TilePane?>
 <?import javafx.scene.layout.VBox?>
@@ -26,7 +26,11 @@
                   </ScrollPane>
                </children>
             </StackPane>
-        <AnchorPane fx:id="controls" prefHeight="200.0" prefWidth="200.0" />
+            <VBox fx:id="controls" alignment="CENTER" prefHeight="200.0" prefWidth="100.0">
+               <children>
+                  <Button fx:id="btnRotateLeft" mnemonicParsing="false" onAction="#rotateLeft" text="Rotate Left" />
+               </children>
+            </VBox>
       </items>
     </SplitPane>
   </children>

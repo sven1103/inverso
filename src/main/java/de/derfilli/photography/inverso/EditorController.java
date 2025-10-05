@@ -14,11 +14,11 @@ import javafx.collections.FXCollections;
 import javafx.collections.ObservableList;
 import javafx.fxml.FXML;
 import javafx.geometry.Orientation;
+import javafx.scene.control.Button;
 import javafx.scene.control.ScrollPane;
 import javafx.scene.control.SplitPane;
 import javafx.scene.image.Image;
 import javafx.scene.image.ImageView;
-import javafx.scene.layout.AnchorPane;
 import javafx.scene.layout.Region;
 import javafx.scene.layout.StackPane;
 import javafx.scene.layout.TilePane;
@@ -70,7 +70,10 @@ public class EditorController {
   private byte[] mainImage = new byte[0];
 
   @FXML
-  private AnchorPane controls;
+  private VBox controls;
+
+  @FXML
+  private Button btnRotateLeft;
 
   private ObservableList<File> files = FXCollections.observableList(new ArrayList<>());
 
@@ -106,7 +109,7 @@ public class EditorController {
         .subscribe();
 
     thumbnailPane.widthProperty().addListener((observable, oldValue, newValue) ->
-             fitThumbnails(newValue.doubleValue()));
+        fitThumbnails(newValue.doubleValue()));
     thumbnailPane.setMinWidth(0);
     thumbnailPane.setPrefWidth(Region.USE_COMPUTED_SIZE);
     thumbnailPane.setMaxWidth(Double.MAX_VALUE);
@@ -133,6 +136,14 @@ public class EditorController {
 
   }
 
+  /**
+   * Fits the main image to the visual part of the editor by scaling it <b>down</b>.
+   * <p>
+   * Maximum scale factor of the original image width is {@code 1}, so the image will not grow more
+   * than its physical size.
+   *
+   * @since 1.0.0
+   */
   private void applyFit() {
     var image = imageView.getImage();
     if (image == null) {
@@ -168,16 +179,29 @@ public class EditorController {
   }
 
   private void fitThumbnails(double paneWidth) {
-    if (paneWidth <= 0) return;
+    if (paneWidth <= 0) {
+      return;
+    }
 
     var padding = thumbnailPane.getPadding();
     double contentWidth = paneWidth - padding.getLeft() - padding.getRight();
 
     double cellW = Math.clamp(contentWidth, CELL_MIN, CELL_MAX);
 
+    // FIXME this should be configured in the FXML only to have one source of truth
     thumbnailPane.setVgap(10);
     thumbnailPane.setPrefColumns(1);
     thumbnailPane.setPrefTileWidth(cellW);
     thumbnailPane.setOrientation(Orientation.VERTICAL);
+  }
+
+  @FXML
+  private void rotateLeft() {
+    rotateMainLeft();
+  }
+
+  private void rotateMainLeft() {
+    double currentRotation = imageView.getRotate();
+    imageView.setRotate(currentRotation - 90.0);
   }
 }
