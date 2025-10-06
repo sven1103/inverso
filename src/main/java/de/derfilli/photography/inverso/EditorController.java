@@ -1,24 +1,34 @@
 package de.derfilli.photography.inverso;
 
 
+import de.derfilli.photography.inverso.behaviour.Memento;
+import de.derfilli.photography.inverso.behaviour.Originator;
 import de.derfilli.photography.inverso.raw.MetadataReader;
 import de.derfilli.photography.inverso.settings.Thumbnail;
 import java.io.ByteArrayInputStream;
 import java.io.File;
+import java.time.Instant;
+import java.util.ArrayDeque;
 import java.util.ArrayList;
 import java.util.Comparator;
+import java.util.Deque;
 import java.util.List;
 import java.util.Objects;
+import java.util.Optional;
 import javafx.application.Platform;
 import javafx.collections.FXCollections;
 import javafx.collections.ObservableList;
 import javafx.fxml.FXML;
 import javafx.geometry.Orientation;
+import javafx.scene.Scene;
 import javafx.scene.control.Button;
 import javafx.scene.control.ScrollPane;
 import javafx.scene.control.SplitPane;
 import javafx.scene.image.Image;
 import javafx.scene.image.ImageView;
+import javafx.scene.input.KeyCode;
+import javafx.scene.input.KeyCodeCombination;
+import javafx.scene.input.KeyCombination;
 import javafx.scene.layout.Region;
 import javafx.scene.layout.StackPane;
 import javafx.scene.layout.TilePane;
@@ -36,13 +46,15 @@ import reactor.core.scheduler.Schedulers;
  *
  * @since <version tag>
  */
-public class EditorController {
+public class EditorController implements Originator {
 
   private final Scheduler fxScheduler = Schedulers.fromExecutor(Platform::runLater);
-  @FXML
 
   private static final double CELL_MIN = 120;
   private static final double CELL_MAX = 330;
+
+  private final Deque<Memento> undoStack = new ArrayDeque<>();
+  private final Deque<Memento> redoStack = new ArrayDeque<>();
 
   @FXML
   private VBox editorWrapper;
@@ -52,8 +64,6 @@ public class EditorController {
 
   @FXML
   private TilePane thumbnailPane;
-
-  private byte[] thumbnailImage = new byte[0];
 
   @FXML
   private StackPane viewer;
@@ -67,13 +77,17 @@ public class EditorController {
   @FXML
   private ImageView imageView;
 
-  private byte[] mainImage = new byte[0];
-
   @FXML
   private VBox controls;
 
   @FXML
   private Button btnRotateLeft;
+
+  private byte[] thumbnailImage = new byte[0];
+
+  private byte[] mainImage = new byte[0];
+
+  private File currentFile;
 
   private ObservableList<File> files = FXCollections.observableList(new ArrayList<>());
 
@@ -92,7 +106,9 @@ public class EditorController {
         Objects.requireNonNull(getClass().getResource("editor.css")).toExternalForm());
 
     // 1. load and set-up thumbnail
-    metadataReader.thumbnailFromRawFile(files.getFirst()).ifPresent(this::setThumbnail);
+    getFileAndSetCurrent(0)
+        .flatMap(file -> metadataReader.thumbnailFromRawFile(file))
+        .ifPresent(this::setThumbnail);
     Flux.fromIterable(files)
         .distinct()
         .flatMapSequential(file ->
@@ -122,18 +138,48 @@ public class EditorController {
     imageView.setCache(true);
     viewerScroll.setFitToHeight(false);
     viewerScroll.setFitToWidth(false);
-    metadataReader.thumbnailFromRawFile(files.getFirst()).ifPresent(this::setImage);
+    Optional.ofNullable(currentFile)
+        .flatMap(file -> metadataReader.thumbnailFromRawFile(file))
+        .ifPresent(this::setImage);
 
     // center content
-    viewerScroll.viewportBoundsProperty().addListener((obs, ov, vb) ->
-        viewerContent.setMinSize(vb.getWidth(), vb.getHeight()));
+    viewerScroll.viewportBoundsProperty()
+        .addListener((obs, ov, vb) ->
+            viewerContent.setMinSize(vb.getWidth(), vb.getHeight()));
 
     // recalc when viewport or image changes
-    viewerScroll.viewportBoundsProperty().addListener((obs, ov, nv) -> applyFit());
-    imageView.imageProperty().addListener((obs, ov, nv) -> applyFit());
+    viewerScroll.viewportBoundsProperty()
+        .addListener((obs, ov, nv) -> applyFit());
+    imageView.imageProperty()
+        .addListener((obs, ov, nv) -> applyFit());
 
     imageView.setImage(new Image(new ByteArrayInputStream(mainImage)));
 
+    editorWrapper.sceneProperty().addListener((obs, oldScene, scene) -> {
+      if (scene != null) {
+        registerAccelerators(scene);
+      }
+    });
+  }
+
+  private void registerAccelerators(Scene scene) {
+    scene.getAccelerators()
+        .put(new KeyCodeCombination(KeyCode.Z, KeyCombination.SHORTCUT_DOWN), this::doUndo);
+    scene.getAccelerators()
+        .put(new KeyCodeCombination(KeyCode.Y, KeyCombination.SHORTCUT_DOWN), this::doRedo);
+    scene.getAccelerators()
+        .put(new KeyCodeCombination(KeyCode.Z, KeyCombination.SHORTCUT_DOWN,
+            KeyCombination.SHIFT_DOWN), this::doRedo);
+  }
+
+  private Optional<File> getFileAndSetCurrent(int index) {
+    try {
+      File file = files.get(index);
+      currentFile = file;
+      return Optional.of(file);
+    } catch (IndexOutOfBoundsException e) {
+      return Optional.empty();
+    }
   }
 
   /**
@@ -197,11 +243,66 @@ public class EditorController {
 
   @FXML
   private void rotateLeft() {
+    undoStack.push(createMemento());
+    redoStack.clear();
     rotateMainLeft();
   }
 
-  private void rotateMainLeft() {
-    double currentRotation = imageView.getRotate();
-    imageView.setRotate(currentRotation - 90.0);
+  private void doUndo() {
+    if (undoStack.isEmpty()) {
+      return;
+    }
+    var snapshot = undoStack.pop();
+    // enables the user to redo actions to the current state
+    redoStack.push(createMemento());
+    restoreMemento(snapshot);
   }
+
+  private void doRedo() {
+    if (redoStack.isEmpty()) {
+      return;
+    }
+    var snapshot = redoStack.pop();
+    // enables the user to undo actions back to the current state
+    undoStack.push(createMemento());
+    restoreMemento(snapshot);
+  }
+
+  private void rotateMainLeft() {
+    imageView.setRotate(imageView.getRotate() - 90.0);
+    applyFit();
+  }
+
+  @Override
+  public Memento createMemento() {
+    return new EditorMemento(imageView.getRotate());
+  }
+
+  @Override
+  public void restoreMemento(Memento memento) {
+    if (memento == null) {
+      return;
+    }
+    if (memento instanceof EditorMemento editorMemento) {
+      imageView.setRotate(editorMemento.imageRotation());
+    }
+  }
+
+  private record EditorMemento(double imageRotation, Instant snapshotTime) implements Memento {
+
+    EditorMemento {
+      Objects.requireNonNull(snapshotTime);
+    }
+
+    EditorMemento(double imageRotation) {
+      this(imageRotation, Instant.now());
+    }
+
+    @Override
+    public String originatorName() {
+      return "editor";
+    }
+
+  }
+
 }
