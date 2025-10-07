@@ -1,3 +1,18 @@
 .image-scroll > .viewport {
   -fx-alignment: CENTER;
 }
+
+.thumbnail {
+  -fx-padding: 6 12 6 12;
+  -fx-border-width: 2;
+  -fx-border-color: transparent;
+  -fx-background-color: transparent;
+  -fx-alignment: center;
+}
+
+.thumbnail:selected {
+  -fx-border-color: dodgerblue;
+  -fx-background-color: rgba(30,144,255,0.1);
+  -fx-border-radius: 6;
+  -fx-background-radius: 6;
+}

@@ -104,31 +104,26 @@ public class EditorController implements Originator {
   private void initialize() {
     viewerScroll.getStylesheets().add(
         Objects.requireNonNull(getClass().getResource("editor.css")).toExternalForm());
+    editorWrapper.getStylesheets()
+        .add(Objects.requireNonNull(getClass().getResource("editor.css")).toExternalForm());
 
     // 1. load and set-up thumbnail
     getFileAndSetCurrent(0)
         .flatMap(file -> metadataReader.thumbnailFromRawFile(file))
         .ifPresent(this::setThumbnail);
-    Flux.fromIterable(files)
-        .distinct()
-        .flatMapSequential(file ->
-            Mono.just(metadataReader.thumbnailFromRawFile(file)
-                .map(inputStream -> new Thumbnail(new Image(inputStream, 460, 0, true, true), 200,
-                    0))
-                .orElse(new Thumbnail(new Image(new ByteArrayInputStream(new byte[0])), 0, 0))))
-        .publishOn(fxScheduler)
-        .doOnNext(thumbnail -> {
-          thumbnailPane.getChildren().add(thumbnail);
-        })
-        .doAfterTerminate(() -> Platform.runLater(() -> fitThumbnails(thumbnailPane.getWidth())))
-        .subscribeOn(Schedulers.boundedElastic())
-        .subscribe();
+
+    Platform.runLater(() -> {
+      var paneWidth = thumbnailPane.getWidth() - thumbnailPane.getPadding().getLeft()
+          - thumbnailPane.getPadding().getRight();
+      thumbnailPane.setMinWidth(0);
+      thumbnailPane.setPrefWidth(Region.USE_COMPUTED_SIZE);
+      thumbnailPane.setMaxWidth(Double.MAX_VALUE);
+
+      populateThumbnails(paneWidth);
+    });
 
     thumbnailPane.widthProperty().addListener((observable, oldValue, newValue) ->
         fitThumbnails(newValue.doubleValue()));
-    thumbnailPane.setMinWidth(0);
-    thumbnailPane.setPrefWidth(Region.USE_COMPUTED_SIZE);
-    thumbnailPane.setMaxWidth(Double.MAX_VALUE);
 
     SplitPane.setResizableWithParent(thumbnailPane, true); // user dragging won't expand it
 
@@ -160,6 +155,23 @@ public class EditorController implements Originator {
         registerAccelerators(scene);
       }
     });
+  }
+
+  private void populateThumbnails(double width) {
+    Flux.fromIterable(files)
+        .distinct()
+        .flatMapSequential(file ->
+            Mono.just(metadataReader.thumbnailFromRawFile(file)
+                .map(inputStream -> new Thumbnail(new Image(inputStream, width, 0, true, true),
+                    width, file.toPath()))
+                .orElse(new Thumbnail(new Image(new ByteArrayInputStream(new byte[0])), width,
+                    file.toPath()))))
+        .publishOn(fxScheduler)
+        .doOnNext(thumbnail -> {
+          thumbnailPane.getChildren().add(thumbnail);
+        })
+        .subscribeOn(Schedulers.boundedElastic())
+        .subscribe();
   }
 
   private void registerAccelerators(Scene scene) {
