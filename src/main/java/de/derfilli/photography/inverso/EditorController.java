@@ -4,9 +4,13 @@ package de.derfilli.photography.inverso;
 import de.derfilli.photography.inverso.behaviour.Memento;
 import de.derfilli.photography.inverso.behaviour.Originator;
 import de.derfilli.photography.inverso.raw.MetadataReader;
+import de.derfilli.photography.inverso.raw.SensorImageReader;
 import de.derfilli.photography.inverso.settings.Thumbnail;
+import de.derfilli.photography.inverso.settings.Thumbnail.ThumbnailForSelectionEvent;
+import de.derfilli.photography.inverso.settings.Thumbnail.ThumbnailSelectedEvent;
 import java.io.ByteArrayInputStream;
 import java.io.File;
+import java.nio.file.Path;
 import java.time.Instant;
 import java.util.ArrayDeque;
 import java.util.ArrayList;
@@ -55,6 +59,7 @@ public class EditorController implements Originator {
 
   private final Deque<Memento> undoStack = new ArrayDeque<>();
   private final Deque<Memento> redoStack = new ArrayDeque<>();
+  private final SensorImageReader sensorImageReader;
 
   @FXML
   private VBox editorWrapper;
@@ -95,9 +100,13 @@ public class EditorController implements Originator {
 
   private Comparator<File> comparator = Comparator.comparing(File::getName);
 
-  public EditorController(@NotNull List<File> imageFiles, @NotNull MetadataReader metadataReader) {
+  public EditorController(
+      @NotNull List<File> imageFiles,
+      @NotNull MetadataReader metadataReader,
+      @NotNull SensorImageReader sensorImageReader) {
     this.files.addAll(Objects.requireNonNull(imageFiles.stream().sorted(comparator).toList()));
     this.metadataReader = Objects.requireNonNull(metadataReader);
+    this.sensorImageReader = Objects.requireNonNull(sensorImageReader);
   }
 
   @FXML
@@ -106,11 +115,6 @@ public class EditorController implements Originator {
         Objects.requireNonNull(getClass().getResource("editor.css")).toExternalForm());
     editorWrapper.getStylesheets()
         .add(Objects.requireNonNull(getClass().getResource("editor.css")).toExternalForm());
-
-    // 1. load and set-up thumbnail
-    getFileAndSetCurrent(0)
-        .flatMap(file -> metadataReader.thumbnailFromRawFile(file))
-        .ifPresent(this::setThumbnail);
 
     Platform.runLater(() -> {
       var paneWidth = thumbnailPane.getWidth() - thumbnailPane.getPadding().getLeft()
@@ -154,6 +158,25 @@ public class EditorController implements Originator {
       if (scene != null) {
         registerAccelerators(scene);
       }
+    });
+
+    thumbnailPane.addEventHandler(ThumbnailSelectedEvent.THUMBNAIL_SELECTED,
+        event -> {
+          System.out.println("Thumbnail selected: " + event.getImagePath());
+          refreshThumbnails(thumbnailPane, event.getImagePath());
+          setImage(metadataReader.thumbnailFromRawFile(event.getImagePath().toFile()).get());
+        });
+
+  }
+
+  private void setImage(Image image) {
+    imageView.setImage(image);
+  }
+
+  private static void refreshThumbnails(TilePane thumbnailPane, Path thumbnailPath) {
+    var event = new ThumbnailForSelectionEvent(thumbnailPane, thumbnailPane, thumbnailPath);
+    thumbnailPane.getChildren().forEach(thumbnail -> {
+      thumbnail.fireEvent(event);
     });
   }
 
@@ -228,8 +251,10 @@ public class EditorController implements Originator {
     imageView.setFitHeight(imageHeight * scale);
   }
 
+
   private void setImage(@NotNull ByteArrayInputStream inputStream) {
     mainImage = inputStream.readAllBytes();
+    imageView.setImage(new Image(new ByteArrayInputStream(mainImage)));
   }
 
   private void setThumbnail(@NotNull ByteArrayInputStream stream) {

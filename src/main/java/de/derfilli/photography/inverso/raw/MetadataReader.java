@@ -23,7 +23,7 @@ public interface MetadataReader {
     }
 
     public static MetadataReader getDefaultReader() {
-      return new DefaultMetadataReader();
+      return new DefaultReader();
     }
   }
 

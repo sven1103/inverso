@@ -1,14 +1,14 @@
 package de.derfilli.photography.inverso.raw;
 
 import java.io.ByteArrayInputStream;
-import java.io.ByteArrayOutputStream;
 import java.io.File;
+import java.nio.file.Path;
 import java.util.Optional;
-import javafx.scene.image.Image;
 import org.bytedeco.javacpp.BytePointer;
 import org.bytedeco.libraw.global.LibRaw;
 import org.bytedeco.libraw.libraw_data_t;
 import org.jetbrains.annotations.NotNull;
+import reactor.core.publisher.Mono;
 
 /**
  * <b><class short description - 1 Line!></b>
@@ -17,7 +17,8 @@ import org.jetbrains.annotations.NotNull;
  *
  * @since <version tag>
  */
-class DefaultMetadataReader implements MetadataReader {
+class DefaultReader implements MetadataReader, SensorImageReader {
+
 
   @Override
   public Optional<ByteArrayInputStream> thumbnailFromRawFile(@NotNull File file) throws MetadataReaderException {
@@ -38,6 +39,28 @@ class DefaultMetadataReader implements MetadataReader {
 
       return Optional.of(new ByteArrayInputStream(bytes));
     }
+  }
+
+  @Override
+  public Mono<RawDataResult> loadRawData(Path file)
+      throws SensorImageReaderException {
+    try (libraw_data_t libRawData = LibRaw.libraw_init(0)) {
+      int returnCode = LibRaw.libraw_open_file(libRawData, file.toString());
+      if (returnCode != 0) {
+        return Mono.error(new SensorImageReaderException("open raw file failed"));
+      }
+      returnCode = LibRaw.libraw_unpack(libRawData);
+      if (returnCode != 0) {
+        return Mono.error(new SensorImageReaderException("unpacking raw data from file filed"));
+      }
+
+      var size = libRawData.sizes();
+      int rawWidth = size.raw_width();
+      int rawHeight = size.raw_height();
+      int colors = libRawData.idata().colors();
+
+    }
+    return Mono.empty();
   }
 }
 

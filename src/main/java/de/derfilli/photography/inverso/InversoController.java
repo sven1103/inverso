@@ -1,6 +1,7 @@
 package de.derfilli.photography.inverso;
 
 import de.derfilli.photography.inverso.raw.MetadataReader;
+import de.derfilli.photography.inverso.raw.SensorImageReader.SensorImageReaderFactory;
 import de.derfilli.photography.inverso.settings.InversoSettings;
 import java.io.File;
 import java.io.IOException;
@@ -79,10 +80,11 @@ public class InversoController {
 
   private void loadEditorStage(List<File> images) throws IOException {
     var reader = MetadataReader.MetadataReaderFactory.getDefaultReader();
+    var sensorReader = SensorImageReaderFactory.getDefaultReader();
     FXMLLoader loader = new FXMLLoader(EditorController.class.getResource("inverso-editor.fxml"));
     loader.setControllerFactory(type -> {
       if (type == EditorController.class) {
-        return new EditorController(images, reader);
+        return new EditorController(images, reader, sensorReader);
       }
       try {
         return type.getDeclaredConstructor().newInstance();
