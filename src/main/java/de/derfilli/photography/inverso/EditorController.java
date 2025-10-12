@@ -4,6 +4,7 @@ package de.derfilli.photography.inverso;
 import de.derfilli.photography.inverso.behaviour.Memento;
 import de.derfilli.photography.inverso.behaviour.Originator;
 import de.derfilli.photography.inverso.raw.MetadataReader;
+import de.derfilli.photography.inverso.raw.RawDataResult;
 import de.derfilli.photography.inverso.raw.SensorImageReader;
 import de.derfilli.photography.inverso.settings.Thumbnail;
 import de.derfilli.photography.inverso.settings.Thumbnail.ThumbnailForSelectionEvent;
@@ -18,7 +19,6 @@ import java.util.Comparator;
 import java.util.Deque;
 import java.util.List;
 import java.util.Objects;
-import java.util.Optional;
 import javafx.application.Platform;
 import javafx.collections.FXCollections;
 import javafx.collections.ObservableList;
@@ -61,6 +61,8 @@ public class EditorController implements Originator {
   private final Deque<Memento> redoStack = new ArrayDeque<>();
   private final SensorImageReader sensorImageReader;
 
+  private final SettingsStore settings = new SettingsStore();
+
   @FXML
   private VBox editorWrapper;
 
@@ -92,7 +94,9 @@ public class EditorController implements Originator {
 
   private byte[] mainImage = new byte[0];
 
-  private File currentFile;
+  private Path currentFile;
+
+  private FileSetting currentFileSetting;
 
   private ObservableList<File> files = FXCollections.observableList(new ArrayList<>());
 
@@ -137,9 +141,6 @@ public class EditorController implements Originator {
     imageView.setCache(true);
     viewerScroll.setFitToHeight(false);
     viewerScroll.setFitToWidth(false);
-    Optional.ofNullable(currentFile)
-        .flatMap(file -> metadataReader.thumbnailFromRawFile(file))
-        .ifPresent(this::setImage);
 
     // center content
     viewerScroll.viewportBoundsProperty()
@@ -162,20 +163,52 @@ public class EditorController implements Originator {
 
     thumbnailPane.addEventHandler(ThumbnailSelectedEvent.THUMBNAIL_SELECTED,
         event -> {
+          currentFile = event.getImagePath();
+
           System.out.println("Thumbnail selected: " + event.getImagePath());
           refreshThumbnails(thumbnailPane, event.getImagePath());
-          setImage(metadataReader.thumbnailFromRawFile(event.getImagePath().toFile()).get());
+
+          bindFileSettings(currentFile);
+
+          var thumbnailMono = loadThumbnail(this, event.getImagePath(), metadataReader);
+          var rawImageMono = loadMainImage(this, event.getImagePath(), sensorImageReader);
+
+          thumbnailMono
+              .publishOn(fxScheduler)
+              .doOnNext(imageView::setImage)
+              .then(rawImageMono)
+              .publishOn(fxScheduler)
+              .doOnNext(imageView::setImage)
+              .subscribe();
         });
 
   }
 
-  private void setImage(Image image) {
-    imageView.setImage(image);
+  private void bindFileSettings(@NotNull Path file) {
+    if (currentFileSetting != null) {
+      imageView.rotateProperty().unbind();
+    }
+    this.currentFileSetting = settings.getFileSettings(file);
+    imageView.rotateProperty().bind(currentFileSetting.rotationProperty());
+  }
+
+  private static Mono<Image> loadThumbnail(EditorController controller, Path rawImagePath,
+      MetadataReader metadataReader) {
+    return metadataReader.thumbnailFromRawFile(rawImagePath.toFile())
+        .map(imageStream -> new Image(imageStream, 0, 0, true, true))
+        .publishOn(controller.fxScheduler);
+  }
+
+  private static Mono<Image> loadMainImage(EditorController controller, Path rawImagePath,
+      SensorImageReader sensorImageReader) {
+    return sensorImageReader.loadRawData(rawImagePath)
+        .map(RawDataResult::image)
+        .publishOn(controller.fxScheduler);
   }
 
   private static void refreshThumbnails(TilePane thumbnailPane, Path thumbnailPath) {
-    var event = new ThumbnailForSelectionEvent(thumbnailPane, thumbnailPane, thumbnailPath);
     thumbnailPane.getChildren().forEach(thumbnail -> {
+      var event = new ThumbnailForSelectionEvent(thumbnailPane, thumbnailPane, thumbnailPath);
       thumbnail.fireEvent(event);
     });
   }
@@ -184,11 +217,9 @@ public class EditorController implements Originator {
     Flux.fromIterable(files)
         .distinct()
         .flatMapSequential(file ->
-            Mono.just(metadataReader.thumbnailFromRawFile(file)
+            metadataReader.thumbnailFromRawFile(file)
                 .map(inputStream -> new Thumbnail(new Image(inputStream, width, 0, true, true),
-                    width, file.toPath()))
-                .orElse(new Thumbnail(new Image(new ByteArrayInputStream(new byte[0])), width,
-                    file.toPath()))))
+                    width, file.toPath())))
         .publishOn(fxScheduler)
         .doOnNext(thumbnail -> {
           thumbnailPane.getChildren().add(thumbnail);
@@ -205,16 +236,6 @@ public class EditorController implements Originator {
     scene.getAccelerators()
         .put(new KeyCodeCombination(KeyCode.Z, KeyCombination.SHORTCUT_DOWN,
             KeyCombination.SHIFT_DOWN), this::doRedo);
-  }
-
-  private Optional<File> getFileAndSetCurrent(int index) {
-    try {
-      File file = files.get(index);
-      currentFile = file;
-      return Optional.of(file);
-    } catch (IndexOutOfBoundsException e) {
-      return Optional.empty();
-    }
   }
 
   /**
@@ -306,13 +327,15 @@ public class EditorController implements Originator {
   }
 
   private void rotateMainLeft() {
-    imageView.setRotate(imageView.getRotate() - 90.0);
+    var currentRotation = currentFileSetting.getRotation();
+    currentFileSetting.setRotation(currentRotation - 90);
     applyFit();
   }
 
   @Override
   public Memento createMemento() {
-    return new EditorMemento(imageView.getRotate());
+    double rotation = settings.getFileSettings(currentFile).getRotation();
+    return new RotationMemento(currentFile, rotation);
   }
 
   @Override
@@ -320,19 +343,21 @@ public class EditorController implements Originator {
     if (memento == null) {
       return;
     }
-    if (memento instanceof EditorMemento editorMemento) {
-      imageView.setRotate(editorMemento.imageRotation());
+    if (memento instanceof RotationMemento rotationMemento) {
+      settings.getFileSettings(rotationMemento.file())
+          .setRotation(rotationMemento.imageRotation());
     }
   }
 
-  private record EditorMemento(double imageRotation, Instant snapshotTime) implements Memento {
+  private record RotationMemento(Path file, double imageRotation, Instant snapshotTime) implements
+      Memento {
 
-    EditorMemento {
+    RotationMemento {
       Objects.requireNonNull(snapshotTime);
     }
 
-    EditorMemento(double imageRotation) {
-      this(imageRotation, Instant.now());
+    RotationMemento(Path file, double imageRotation) {
+      this(file, imageRotation, Instant.now());
     }
 
     @Override
