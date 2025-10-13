@@ -4,9 +4,11 @@ package de.derfilli.photography.inverso;
 import de.derfilli.photography.inverso.behaviour.Memento;
 import de.derfilli.photography.inverso.behaviour.Originator;
 import de.derfilli.photography.inverso.raw.MetadataReader;
+import de.derfilli.photography.inverso.raw.MetadataReader.ThumbnailResult;
 import de.derfilli.photography.inverso.raw.RawDataResult;
 import de.derfilli.photography.inverso.raw.SensorImageReader;
 import de.derfilli.photography.inverso.settings.Thumbnail;
+import de.derfilli.photography.inverso.settings.Thumbnail.Rotation;
 import de.derfilli.photography.inverso.settings.Thumbnail.ThumbnailForSelectionEvent;
 import de.derfilli.photography.inverso.settings.Thumbnail.ThumbnailSelectedEvent;
 import java.io.ByteArrayInputStream;
@@ -25,7 +27,9 @@ import javafx.collections.ObservableList;
 import javafx.fxml.FXML;
 import javafx.geometry.Orientation;
 import javafx.scene.Scene;
+import javafx.scene.control.Alert;
 import javafx.scene.control.Button;
+import javafx.scene.control.ButtonType;
 import javafx.scene.control.ScrollPane;
 import javafx.scene.control.SplitPane;
 import javafx.scene.image.Image;
@@ -50,7 +54,7 @@ import reactor.core.scheduler.Schedulers;
  *
  * @since <version tag>
  */
-public class EditorController implements Originator {
+public class EditorController implements Originator<Memento> {
 
   private final Scheduler fxScheduler = Schedulers.fromExecutor(Platform::runLater);
 
@@ -150,6 +154,8 @@ public class EditorController implements Originator {
     // recalc when viewport or image changes
     viewerScroll.viewportBoundsProperty()
         .addListener((obs, ov, nv) -> applyFit());
+    imageView.rotateProperty()
+        .addListener((obs, ov, nv) -> applyFit());
     imageView.imageProperty()
         .addListener((obs, ov, nv) -> applyFit());
 
@@ -166,7 +172,7 @@ public class EditorController implements Originator {
           currentFile = event.getImagePath();
 
           System.out.println("Thumbnail selected: " + event.getImagePath());
-          refreshThumbnails(thumbnailPane, event.getImagePath());
+          broadcastSelectedThumbnail(thumbnailPane, event.getImagePath());
 
           bindFileSettings(currentFile);
 
@@ -175,13 +181,32 @@ public class EditorController implements Originator {
 
           thumbnailMono
               .publishOn(fxScheduler)
-              .doOnNext(imageView::setImage)
+              .doOnNext(this::setMainImage)
               .then(rawImageMono)
+              .checkpoint("load-raw")
               .publishOn(fxScheduler)
-              .doOnNext(imageView::setImage)
-              .subscribe();
+              .doOnNext(this::setMainImage)
+              .subscribe(null, this::showAlert);
         });
 
+  }
+
+  private void setMainImage(RawDataResult rawDataResult) {
+    currentFileSetting.bakedRotationProperty().set(rawDataResult.rotation());
+    imageView.setImage(rawDataResult.image());
+    applyFit();
+  }
+
+  private void setMainImage(ThumbnailResult result) {
+    currentFileSetting.bakedRotationProperty().set(0);
+    currentFileSetting.initRotationIfAbsent(result.rotation());
+    imageView.setImage(result.image());
+    applyFit();
+  }
+
+  private void showAlert(Throwable error) {
+    Platform.runLater(
+        () -> new Alert(Alert.AlertType.ERROR, error.getMessage(), ButtonType.OK).showAndWait());
   }
 
   private void bindFileSettings(@NotNull Path file) {
@@ -189,24 +214,23 @@ public class EditorController implements Originator {
       imageView.rotateProperty().unbind();
     }
     this.currentFileSetting = settings.getFileSettings(file);
-    imageView.rotateProperty().bind(currentFileSetting.rotationProperty());
+    imageView.rotateProperty().bind(currentFileSetting.rotationProperty()
+        .subtract(currentFileSetting.bakedRotationProperty()));
   }
 
-  private static Mono<Image> loadThumbnail(EditorController controller, Path rawImagePath,
+  private static Mono<ThumbnailResult> loadThumbnail(EditorController controller, Path rawImagePath,
       MetadataReader metadataReader) {
-    return metadataReader.thumbnailFromRawFile(rawImagePath.toFile())
-        .map(imageStream -> new Image(imageStream, 0, 0, true, true))
+    return metadataReader.loadThumbnail(rawImagePath.toFile(), 0)
         .publishOn(controller.fxScheduler);
   }
 
-  private static Mono<Image> loadMainImage(EditorController controller, Path rawImagePath,
+  private static Mono<RawDataResult> loadMainImage(EditorController controller, Path rawImagePath,
       SensorImageReader sensorImageReader) {
-    return sensorImageReader.loadRawData(rawImagePath)
-        .map(RawDataResult::image)
+    return sensorImageReader.loadRawPreview(rawImagePath)
         .publishOn(controller.fxScheduler);
   }
 
-  private static void refreshThumbnails(TilePane thumbnailPane, Path thumbnailPath) {
+  private static void broadcastSelectedThumbnail(TilePane thumbnailPane, Path thumbnailPath) {
     thumbnailPane.getChildren().forEach(thumbnail -> {
       var event = new ThumbnailForSelectionEvent(thumbnailPane, thumbnailPane, thumbnailPath);
       thumbnail.fireEvent(event);
@@ -217,9 +241,9 @@ public class EditorController implements Originator {
     Flux.fromIterable(files)
         .distinct()
         .flatMapSequential(file ->
-            metadataReader.thumbnailFromRawFile(file)
-                .map(inputStream -> new Thumbnail(new Image(inputStream, width, 0, true, true),
-                    width, file.toPath())))
+            metadataReader.loadThumbnail(file, width)
+                .map(result -> Thumbnail.create(result.image(),
+                    width, file.toPath(), Rotation.fromDegrees(result.rotation()))))
         .publishOn(fxScheduler)
         .doOnNext(thumbnail -> {
           thumbnailPane.getChildren().add(thumbnail);
@@ -252,8 +276,10 @@ public class EditorController implements Originator {
       return;
     }
 
-    double imageWidth = image.getWidth();
-    double imageHeight = image.getHeight();
+    var isSwapped = isOrientationSwapped(imageView.getRotate());
+
+    double imageWidth = isSwapped ? image.getHeight() : image.getWidth();
+    double imageHeight = isSwapped ? image.getWidth() : image.getHeight();
 
     if (imageWidth <= 0 || imageHeight <= 0) {
       return;
@@ -266,20 +292,24 @@ public class EditorController implements Originator {
     }
 
     double scale = Math.min(viewportWidth / imageWidth, viewportHeight / imageHeight);
-    scale = Math.min(scale, 1.0);
+    scale = Math.min(scale, 1);
 
-    imageView.setFitWidth(imageWidth * scale);
-    imageView.setFitHeight(imageHeight * scale);
+    boolean widthLimits = (viewportWidth / imageWidth) <= (viewportHeight / imageHeight);
+    if (widthLimits) {
+      imageView.setFitWidth(image.getWidth() * scale);     // constrain width
+      imageView.setFitHeight(0);              // release height constraint
+    } else {
+      imageView.setFitHeight(image.getHeight() * scale);    // constrain height
+      imageView.setFitWidth(0);               // release width constraint
+    }
   }
 
-
-  private void setImage(@NotNull ByteArrayInputStream inputStream) {
-    mainImage = inputStream.readAllBytes();
-    imageView.setImage(new Image(new ByteArrayInputStream(mainImage)));
-  }
-
-  private void setThumbnail(@NotNull ByteArrayInputStream stream) {
-    thumbnailImage = stream.readAllBytes();
+  private static boolean isOrientationSwapped(double rotation) {
+    var corrected = rotation % 360;
+    if (corrected < 0) {
+      corrected += 360;
+    }
+    return corrected == 90 || corrected == 270;
   }
 
   private void fitThumbnails(double paneWidth) {
@@ -364,7 +394,5 @@ public class EditorController implements Originator {
     public String originatorName() {
       return "editor";
     }
-
   }
-
 }

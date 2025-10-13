@@ -2,6 +2,7 @@ package de.derfilli.photography.inverso.raw;
 
 import java.io.ByteArrayInputStream;
 import java.io.File;
+import javafx.scene.image.Image;
 import org.jetbrains.annotations.NotNull;
 import reactor.core.publisher.Mono;
 
@@ -13,6 +14,8 @@ import reactor.core.publisher.Mono;
  * @since <version tag>
  */
 public interface MetadataReader {
+
+  Mono<ThumbnailResult> loadThumbnail(@NotNull File file, double renderedWith);
 
   Mono<ByteArrayInputStream> thumbnailFromRawFile(@NotNull File file)
       throws MetadataReaderException;
@@ -37,5 +40,7 @@ public interface MetadataReader {
       super(message, cause);
     }
   }
+
+  record ThumbnailResult(Image image, double rotation) {}
 
 }

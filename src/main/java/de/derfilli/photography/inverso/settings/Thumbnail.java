@@ -7,11 +7,13 @@ import javafx.event.Event;
 import javafx.event.EventTarget;
 import javafx.event.EventType;
 import javafx.geometry.Pos;
+import javafx.scene.Group;
 import javafx.scene.image.Image;
 import javafx.scene.image.ImageView;
 import javafx.scene.layout.Region;
 import javafx.scene.layout.StackPane;
 import javafx.scene.layout.VBox;
+import org.jetbrains.annotations.NotNull;
 
 /**
  * <b><class short description - 1 Line!></b>
@@ -22,27 +24,68 @@ import javafx.scene.layout.VBox;
  */
 public class Thumbnail extends VBox {
 
+  private Rotation rotation;
   private ImageView imageView = new ImageView();
 
   private StackPane container = new StackPane();
 
   private boolean selected = false;
 
+  private final Group rotator = new Group(imageView); // <-- rotation target
+
   private final Path originalImagePath;
 
-  public Thumbnail(Image image, double fitWidth, Path originalImage) {
+  public static Thumbnail create(
+      @NotNull Image image,
+      double fitWidth,
+      @NotNull Path originalImagePath) {
+    return create(image, fitWidth, originalImagePath, Rotation.NORMAL);
+  }
+
+  public static Thumbnail create(
+      @NotNull Image image,
+      double fitWidth,
+      @NotNull Path originalImagePath,
+      @NotNull Thumbnail.Rotation rotation) {
+    return new Thumbnail(image, fitWidth, originalImagePath, rotation);
+  }
+
+  private Thumbnail(Image image, double fitWidth, Path originalImagePath, Rotation rotation) {
+    this(image, fitWidth, originalImagePath);
+    setRotation(rotation);
+  }
+
+  private Thumbnail(Image image, double fitWidth, Path originalImage) {
     Objects.requireNonNull(image);
     originalImagePath = Objects.requireNonNull(originalImage);
 
-    setFillWidth(false);
+    setFillWidth(true);
     getStyleClass().add("thumbnail");
 
-    container.getChildren().add(imageView);
+    container.getChildren().add(rotator);
     container.setAlignment(Pos.CENTER);
+
+    // Let TilePane compute height from this container:
+    container.setMinHeight(Region.USE_PREF_SIZE);
+    container.setMaxHeight(Region.USE_PREF_SIZE);
+
+    // When rotation or fit width changes, the rotator's bounds change.
+    // Reflect that into the container's preferred height so TilePane lays out correctly.
+    rotator.boundsInParentProperty().addListener((obs, oldB, newB) -> {
+      container.setPrefHeight(newB.getHeight());
+      requestLayout(); // ask parent (TilePane) to relayout
+    });
+
+    // Also react when the image changes (first load) so we get an initial height:
+    imageView.imageProperty().addListener((obs, o, n) -> {
+      container.setPrefHeight(rotator.getBoundsInParent().getHeight());
+      requestLayout();
+    });
+
+
     getChildren().add(container);
 
     imageView.setImage(image);
-    imageView.setFitWidth(fitWidth);
     imageView.setPreserveRatio(true);
     imageView.setSmooth(true);
     imageView.setCache(true);
@@ -53,13 +96,20 @@ public class Thumbnail extends VBox {
     setMaxWidth(Double.MAX_VALUE);
     setPrefWidth(fitWidth > 0 ? fitWidth : Region.USE_COMPUTED_SIZE);
 
-    setOnMouseClicked(e -> {
-      setSelected(!selected);
-    });
+    setOnMouseClicked(e -> setSelected(!selected));
 
-    addEventFilter(ThumbnailForSelectionEvent.THUMBNAIL_FOR_SELECTION, e -> {
-      refreshOnSelectedEvent(e);
-    });
+    addEventFilter(ThumbnailForSelectionEvent.THUMBNAIL_FOR_SELECTION, this::refreshOnSelectedEvent);
+  }
+
+  /** Call this instead of rotator.setRotate(...) so height is recomputed. */
+  public void setRotation(@NotNull Rotation r) {
+    this.rotation = r;
+    rotator.setRotate(r.value());
+    //rotator.setScaleX(1);
+    //  rotator.setScaleY(1);
+    // force recompute right away
+    container.setPrefHeight(rotator.getBoundsInParent().getHeight());
+    requestLayout();
   }
 
   private void refreshOnSelectedEvent(ThumbnailForSelectionEvent e) {
@@ -69,29 +119,12 @@ public class Thumbnail extends VBox {
     }
   }
 
-  public void select() {
-    setSelected(true);
-  }
-
   private void setSelected(boolean state) {
     this.selected = state;
     pseudoClassStateChanged(PseudoClass.getPseudoClass("selected"), selected);
     if (selected) {
       fireEvent(new ThumbnailSelectedEvent(this, this, originalImagePath));
     }
-  }
-
-
-  public void setImage(Image image) {
-    imageView.setImage(image);
-  }
-
-  public ImageView getImageView() {
-    return imageView;
-  }
-
-  public Image getImage() {
-    return imageView.getImage();
   }
 
   public static final class ThumbnailSelectedEvent extends Event {
@@ -128,4 +161,49 @@ public class Thumbnail extends VBox {
     }
   }
 
+  public enum Rotation {
+
+    NORMAL(0),
+    ROTATE_90(90),
+    ROTATE_180(180),
+    ROTATE_270(270);
+
+    private final double degrees;
+
+    Rotation(double degrees) {
+      this.degrees = degrees;
+    }
+
+    public double value() {
+      return degrees;
+    }
+
+    public Rotation rotateLeft() {
+      return switch (this) {
+        case NORMAL -> ROTATE_90;
+        case ROTATE_90 -> ROTATE_180;
+        case ROTATE_180 -> ROTATE_270;
+        case ROTATE_270 -> NORMAL;
+      };
+    }
+
+    public Rotation rotateRight() {
+      return switch (this) {
+        case NORMAL -> ROTATE_270;
+        case ROTATE_90 -> NORMAL;
+        case ROTATE_180 -> ROTATE_90;
+        case ROTATE_270 -> ROTATE_180;
+      };
+    }
+
+    public static Rotation fromDegrees(double degrees) {
+      return switch ((int) degrees) {
+        case 90 -> ROTATE_90;
+        case 180 -> ROTATE_180;
+        case 270 -> ROTATE_270;
+        default -> NORMAL;
+      };
+    }
+
+  }
 }

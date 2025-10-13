@@ -18,10 +18,15 @@ public final class FileSetting {
 
   private DoubleProperty rotation;
 
+  private DoubleProperty bakedRotation;
+
+  private boolean initialized = false;
+
   public FileSetting(Path file) {
     this.filePath = Objects.requireNonNull(file);
     //  Set the initial rotation to 0 degrees
     this.rotation = new SimpleDoubleProperty(0.0);
+    this.bakedRotation = new SimpleDoubleProperty(0.0);
   }
 
   public Path filePath() {
@@ -34,10 +39,23 @@ public final class FileSetting {
 
   public void setRotation(double rotation) {
     this.rotation.set(rotation);
+    initialized = true;
   }
 
   public double getRotation() {
     return rotation.get();
   }
+
+  public DoubleProperty bakedRotationProperty() {
+    return bakedRotation;
+  }
+
+  public void initRotationIfAbsent(double rotation) {
+    if (!initialized) {
+      this.rotation.set(rotation);
+      initialized = true;
+    }
+  }
+
 
 }

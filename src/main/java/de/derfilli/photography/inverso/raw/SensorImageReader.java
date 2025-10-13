@@ -12,7 +12,7 @@ import reactor.core.publisher.Mono;
  */
 public interface SensorImageReader {
 
-  Mono<RawDataResult> loadRawData(Path file) throws SensorImageReaderException;
+  Mono<RawDataResult> loadRawPreview(Path file) throws SensorImageReaderException;
 
   class SensorImageReaderFactory {
 

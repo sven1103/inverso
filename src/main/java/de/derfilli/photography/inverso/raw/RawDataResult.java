@@ -15,5 +15,6 @@ public record RawDataResult(
     Path originalFile,
     int width,
     int height,
-    String colorSpace) {
+    String colorSpace,
+    double rotation) {
 }
