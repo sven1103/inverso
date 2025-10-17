@@ -7,10 +7,13 @@ import de.derfilli.photography.inverso.raw.MetadataReader;
 import de.derfilli.photography.inverso.raw.MetadataReader.ThumbnailResult;
 import de.derfilli.photography.inverso.raw.RawDataResult;
 import de.derfilli.photography.inverso.raw.SensorImageReader;
+import de.derfilli.photography.inverso.settings.FileSetting;
+import de.derfilli.photography.inverso.settings.SettingsStore;
 import de.derfilli.photography.inverso.settings.Thumbnail;
 import de.derfilli.photography.inverso.settings.Thumbnail.Rotation;
 import de.derfilli.photography.inverso.settings.Thumbnail.ThumbnailForSelectionEvent;
 import de.derfilli.photography.inverso.settings.Thumbnail.ThumbnailSelectedEvent;
+import de.derfilli.photography.inverso.storage.AutoSave;
 import java.io.ByteArrayInputStream;
 import java.io.File;
 import java.nio.file.Path;
@@ -66,6 +69,8 @@ public class EditorController implements Originator<Memento> {
   private final SensorImageReader sensorImageReader;
 
   private final SettingsStore settings = new SettingsStore();
+
+  private final AutoSave autoSave = new AutoSave(settings);
 
   @FXML
   private VBox editorWrapper;

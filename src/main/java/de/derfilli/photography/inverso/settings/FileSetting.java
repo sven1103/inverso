@@ -1,9 +1,10 @@
-package de.derfilli.photography.inverso;
+package de.derfilli.photography.inverso.settings;
 
 import java.nio.file.Path;
 import java.util.Objects;
 import javafx.beans.property.DoubleProperty;
 import javafx.beans.property.SimpleDoubleProperty;
+import reactor.core.publisher.Flux;
 
 /**
  * <b><class short description - 1 Line!></b>
@@ -57,5 +58,19 @@ public final class FileSetting {
     }
   }
 
+  public FileSettingsSnapshot snapshot() {
+    return FileSettingsSnapshot.create(filePath, rotationProperty().get(), bakedRotationProperty().get());
+  }
 
+  Flux<FileSettingEvent> changes() {
+    return Flux.create(sink -> {
+      rotation.addListener((v, o, n) -> {
+        System.out.println("Changed rotation for " + filePath);
+        sink.next(new FileSettingEvent(filePath, this));
+      });
+      bakedRotation.addListener((v, o, n) -> {
+        sink.next(new FileSettingEvent(filePath, this));
+      });
+    });
+  }
 }

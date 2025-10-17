@@ -22,7 +22,7 @@
       <dependency>
         <groupId>io.projectreactor</groupId>
         <artifactId>reactor-bom</artifactId>
-        <version>2024.0.6</version>
+        <version>2024.0.11</version>
         <type>pom</type>
         <scope>import</scope>
       </dependency>
@@ -71,7 +71,14 @@
     <dependency>
       <groupId>ch.qos.logback</groupId>
       <artifactId>logback-classic</artifactId>
-      <version>1.5.18</version>
+      <version>1.5.19</version>
+    </dependency>
+
+    <!-- https://mvnrepository.com/artifact/tools.jackson.core/jackson-databind -->
+    <dependency>
+      <groupId>tools.jackson.core</groupId>
+      <artifactId>jackson-databind</artifactId>
+      <version>3.0.0</version>
     </dependency>
 
     <!-- https://mvnrepository.com/artifact/io.projectreactor/reactor-core -->
