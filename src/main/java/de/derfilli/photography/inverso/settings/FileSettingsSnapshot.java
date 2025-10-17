@@ -17,10 +17,10 @@ public record FileSettingsSnapshot(
     @JsonProperty(required = true, value = "bakedRotation") double bakedRotation
     ) {
 
-  private static final String VERSION = "v1";
+  private static final String VERSION_TAG = "v1";
 
   public static FileSettingsSnapshot create(Path filePath, double rotation, double rotationBaked) {
-    return new FileSettingsSnapshot(VERSION, filePath, rotation, rotationBaked);
+    return new FileSettingsSnapshot(VERSION_TAG, filePath, rotation, rotationBaked);
   }
 
 }
