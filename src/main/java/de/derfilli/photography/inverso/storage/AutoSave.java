@@ -1,9 +1,8 @@
 package de.derfilli.photography.inverso.storage;
 
-import de.derfilli.photography.inverso.settings.FileSettingsStorage;
 import de.derfilli.photography.inverso.settings.FileSettingsSnapshot;
+import de.derfilli.photography.inverso.settings.FileSettingsStorage;
 import de.derfilli.photography.inverso.settings.SettingsStore;
-import java.io.BufferedWriter;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -40,28 +39,32 @@ public class AutoSave implements FileSettingsStorage {
     settingsStore.changes()
         .sampleTimeout(event -> Mono.delay(Duration.ofMillis(300)))
         .subscribe(changes -> {
-      var snapshot = changes.setting().snapshot();
-      save(snapshot);
-      log.info("(Autosave) Setting changes successfully for: " + snapshot.filePath());
-    });
+          var snapshot = changes.setting().snapshot();
+          save(snapshot);
+          log.info("(Autosave) Setting changes successfully for: " + snapshot.filePath());
+        }, error -> {
+          log.error("(Autosave) Error while saving changes", error);
+        });
   }
 
   @Override
   public Path save(FileSettingsSnapshot snapshot) throws StorageException {
     var targetDirectory = snapshot.filePath().getParent();
     if (targetDirectory == null || !targetDirectory.toFile().exists()) {
-      throw new StorageException("Cannot save file settings since the target directory is not existing.");
+      throw new StorageException(
+          "Cannot save file settings since the target directory is not existing.");
     }
     if (!targetDirectory.toFile().canWrite()) {
-      throw new StorageException("Cannot save file settings since the target directory is not writable: "  + targetDirectory);
+      throw new StorageException(
+          "Cannot save file settings since the target directory is not writable: "
+              + targetDirectory);
     }
 
-    var settingsFileName = buildStorageFilePath(targetDirectory, snapshot.filePath().getFileName().toString());
-
-    JsonMapper jsonMapper = new JsonMapper();
-
-    try(BufferedWriter writer = Files.newBufferedWriter(settingsFileName)) {
-      jsonMapper
+    var settingsFileName = buildStorageFilePath(targetDirectory,
+        snapshot.filePath().getFileName().toString());
+    var mapper = new JsonMapper();
+    try (var writer = Files.newBufferedWriter(settingsFileName)) {
+      mapper
           .writerWithDefaultPrettyPrinter()
           .writeValue(writer, snapshot);
     } catch (JacksonException | IOException e) {
