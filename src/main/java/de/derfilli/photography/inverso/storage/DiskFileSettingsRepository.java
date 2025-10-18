@@ -1,19 +1,14 @@
 package de.derfilli.photography.inverso.storage;
 
+import de.derfilli.photography.inverso.settings.FileSettingsRepository;
 import de.derfilli.photography.inverso.settings.FileSettingsSnapshot;
-import de.derfilli.photography.inverso.settings.FileSettingsStorage;
-import de.derfilli.photography.inverso.settings.SettingsStore;
+import java.io.File;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
-import java.time.Duration;
-import java.util.Objects;
 import java.util.Optional;
-import org.jetbrains.annotations.NotNull;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
-import reactor.core.publisher.Mono;
 import tools.jackson.core.JacksonException;
+import tools.jackson.databind.ObjectMapper;
 import tools.jackson.databind.json.JsonMapper;
 
 /**
@@ -23,29 +18,9 @@ import tools.jackson.databind.json.JsonMapper;
  *
  * @since <version tag>
  */
-public class AutoSave implements FileSettingsStorage {
+public class DiskFileSettingsRepository implements FileSettingsRepository {
 
   public static final String INVERSO_JSON_FILENAME_EXTENSION = ".inverso.json";
-  private final @NotNull SettingsStore settingsStore;
-
-  private static final Logger log = LoggerFactory.getLogger(AutoSave.class);
-
-  public AutoSave(@NotNull SettingsStore settingsStore) {
-    this.settingsStore = Objects.requireNonNull(settingsStore);
-    subscribeToEvents(this.settingsStore);
-  }
-
-  private void subscribeToEvents(@NotNull SettingsStore settingsStore) {
-    settingsStore.changes()
-        .sampleTimeout(event -> Mono.delay(Duration.ofMillis(300)))
-        .subscribe(changes -> {
-          var snapshot = changes.setting().snapshot();
-          save(snapshot);
-          log.info("(Autosave) Setting changes successfully for: " + snapshot.filePath());
-        }, error -> {
-          log.error("(Autosave) Error while saving changes", error);
-        });
-  }
 
   @Override
   public Path save(FileSettingsSnapshot snapshot) throws StorageException {
@@ -80,8 +55,20 @@ public class AutoSave implements FileSettingsStorage {
 
   @Override
   public Optional<FileSettingsSnapshot> load(Path file) throws StorageException {
-    // TODO implement
-    throw new RuntimeException("Not yet implemented");
-  }
+    var expectedSettingsFile = buildStorageFilePath(file.getParent(), file.getFileName().toString());
+    if (!Files.exists(expectedSettingsFile)) {
+      return Optional.empty();
+    }
+    if (!Files.isReadable(expectedSettingsFile)) {
+      throw new StorageException("Insufficient rights. Cannot read settings file: " + expectedSettingsFile);
+    }
+    var objectMapper = new ObjectMapper();
+    try {
+      var settings = objectMapper.readValue(expectedSettingsFile, FileSettingsSnapshot.class);
 
+      return Optional.of(settings);
+    } catch (JacksonException e) {
+      throw new StorageException("Cannot read settings file: " + expectedSettingsFile, e);
+    }
+  }
 }

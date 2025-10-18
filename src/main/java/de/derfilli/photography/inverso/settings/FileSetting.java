@@ -38,9 +38,25 @@ public final class FileSetting {
     return rotation;
   }
 
+  private void actionAndEnsureInit(Runnable action) {
+    action.run();
+    if (!initialized) {
+      initialized = true;
+    }
+  }
+
+  public void setRotationIfAbsent(double rotation) {
+    if (!initialized) {
+      actionAndEnsureInit(() -> this.rotation.set(rotation));
+    }
+  }
+
   public void setRotation(double rotation) {
-    this.rotation.set(rotation);
-    initialized = true;
+    actionAndEnsureInit(() -> this.rotation.set(rotation));
+  }
+
+  public void setBakedRotation(double bakedRotation) {
+    actionAndEnsureInit(() -> this.bakedRotation.set(bakedRotation));
   }
 
   public double getRotation() {
@@ -51,21 +67,14 @@ public final class FileSetting {
     return bakedRotation;
   }
 
-  public void initRotationIfAbsent(double rotation) {
-    if (!initialized) {
-      this.rotation.set(rotation);
-      initialized = true;
-    }
-  }
-
   public FileSettingsSnapshot snapshot() {
-    return FileSettingsSnapshot.create(filePath, rotationProperty().get(), bakedRotationProperty().get());
+    return FileSettingsSnapshot.create(filePath, rotationProperty().get(),
+        bakedRotationProperty().get());
   }
 
-  Flux<FileSettingEvent> changes() {
+  public Flux<FileSettingEvent> changes() {
     return Flux.create(sink -> {
       rotation.addListener((v, o, n) -> {
-        System.out.println("Changed rotation for " + filePath);
         sink.next(new FileSettingEvent(filePath, this));
       });
       bakedRotation.addListener((v, o, n) -> {

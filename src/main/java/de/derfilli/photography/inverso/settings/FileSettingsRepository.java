@@ -10,7 +10,7 @@ import java.util.Optional;
  *
  * @since <version tag>
  */
-public interface FileSettingsStorage {
+public interface FileSettingsRepository {
 
   Path save(FileSettingsSnapshot snapshot) throws StorageException;
 
@@ -24,8 +24,6 @@ public interface FileSettingsStorage {
       super(message, cause);
     }
   }
-
-
 }
 
 

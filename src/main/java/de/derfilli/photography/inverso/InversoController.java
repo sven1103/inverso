@@ -1,7 +1,7 @@
 package de.derfilli.photography.inverso;
 
-import de.derfilli.photography.inverso.raw.MetadataReader;
-import de.derfilli.photography.inverso.raw.SensorImageReader.SensorImageReaderFactory;
+import de.derfilli.photography.inverso.image.MetadataReader;
+import de.derfilli.photography.inverso.image.SensorImageReader.SensorImageReaderFactory;
 import de.derfilli.photography.inverso.settings.InversoSettings;
 import java.io.File;
 import java.io.IOException;

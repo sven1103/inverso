@@ -1,4 +1,4 @@
-package de.derfilli.photography.inverso.raw;
+package de.derfilli.photography.inverso.image;
 
 import java.io.ByteArrayInputStream;
 import java.io.File;

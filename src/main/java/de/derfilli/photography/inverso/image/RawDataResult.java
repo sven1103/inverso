@@ -1,4 +1,4 @@
-package de.derfilli.photography.inverso.raw;
+package de.derfilli.photography.inverso.image;
 
 import java.nio.file.Path;
 import javafx.scene.image.Image;

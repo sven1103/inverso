@@ -3,17 +3,19 @@ package de.derfilli.photography.inverso;
 
 import de.derfilli.photography.inverso.behaviour.Memento;
 import de.derfilli.photography.inverso.behaviour.Originator;
-import de.derfilli.photography.inverso.raw.MetadataReader;
-import de.derfilli.photography.inverso.raw.MetadataReader.ThumbnailResult;
-import de.derfilli.photography.inverso.raw.RawDataResult;
-import de.derfilli.photography.inverso.raw.SensorImageReader;
+import de.derfilli.photography.inverso.image.MetadataReader;
+import de.derfilli.photography.inverso.image.MetadataReader.ThumbnailResult;
+import de.derfilli.photography.inverso.image.RawDataResult;
+import de.derfilli.photography.inverso.image.SensorImageReader;
 import de.derfilli.photography.inverso.settings.FileSetting;
+import de.derfilli.photography.inverso.settings.FileSettingsRepository;
 import de.derfilli.photography.inverso.settings.SettingsStore;
 import de.derfilli.photography.inverso.settings.Thumbnail;
 import de.derfilli.photography.inverso.settings.Thumbnail.Rotation;
 import de.derfilli.photography.inverso.settings.Thumbnail.ThumbnailForSelectionEvent;
 import de.derfilli.photography.inverso.settings.Thumbnail.ThumbnailSelectedEvent;
-import de.derfilli.photography.inverso.storage.AutoSave;
+import de.derfilli.photography.inverso.settings.AutoSave;
+import de.derfilli.photography.inverso.storage.DiskFileSettingsRepository;
 import java.io.ByteArrayInputStream;
 import java.io.File;
 import java.nio.file.Path;
@@ -68,9 +70,11 @@ public class EditorController implements Originator<Memento> {
   private final Deque<Memento> redoStack = new ArrayDeque<>();
   private final SensorImageReader sensorImageReader;
 
-  private final SettingsStore settings = new SettingsStore();
+  private final FileSettingsRepository fileSettingsRepository = new DiskFileSettingsRepository();
 
-  private final AutoSave autoSave = new AutoSave(settings);
+  private final SettingsStore settings = new SettingsStore(fileSettingsRepository);
+
+  private final AutoSave autoSave = new AutoSave(settings, fileSettingsRepository);
 
   @FXML
   private VBox editorWrapper;
@@ -204,7 +208,7 @@ public class EditorController implements Originator<Memento> {
 
   private void setMainImage(ThumbnailResult result) {
     currentFileSetting.bakedRotationProperty().set(0);
-    currentFileSetting.initRotationIfAbsent(result.rotation());
+    currentFileSetting.setRotationIfAbsent(result.rotation());
     imageView.setImage(result.image());
     applyFit();
   }
